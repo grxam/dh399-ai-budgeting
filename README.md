@@ -16,7 +16,7 @@ See [docs/architecture.md](docs/architecture.md) for details.
 
 ## Quick start
 
-Requires Python 3.11+ and an Anthropic API key.
+Requires Python 3.11+ and a local model server such as [Ollama](https://ollama.com) or LM Studio running Gemma. No cloud API key is needed.
 
 ```powershell
 git clone https://github.com/grxam/dh399-ai-budgeting.git
@@ -24,7 +24,7 @@ cd dh399-ai-budgeting
 python -m venv .venv
 .venv\Scripts\Activate.ps1          # macOS/Linux: source .venv/bin/activate
 pip install -e ".[dev]"
-copy .env.example .env              # then add your ANTHROPIC_API_KEY
+copy .env.example .env              # then set the model server URL and model names
 
 ```
 
