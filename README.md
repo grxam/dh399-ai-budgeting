@@ -42,7 +42,7 @@ Run the checks:
 pytest
 ```
 
-## Repository layout
+## Planned repository layout (code is being written)
 
 | Path | Purpose |
 |------|---------|
