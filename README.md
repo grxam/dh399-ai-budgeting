@@ -25,7 +25,7 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1          # macOS/Linux: source .venv/bin/activate
 pip install -e ".[dev]"
 copy .env.example .env              # then add your ANTHROPIC_API_KEY
-pre-commit install
+
 ```
 
 Try it:
@@ -40,8 +40,6 @@ Run the checks:
 
 ```powershell
 pytest
-ruff check .
-ruff format --check .
 ```
 
 ## Repository layout
@@ -57,15 +55,15 @@ ruff format --check .
 | `tests/` | Unit tests (no network calls; agents are mocked) |
 | `data/samples/` | Sample receipts (**synthetic only**, see data policy) |
 | `docs/` | Architecture, setup, team workflow, data privacy |
-| `.github/` | CI, issue/PR templates, Dependabot |
+| `.github/` | CI (runs the tests) |
 
 ## Working as a team
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/team-workflow.md](docs/team-workflow.md). Short version: branch from `main`, open a PR, get one review, CI must pass, squash-merge.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: work on a branch, open a pull request, have a teammate look it over, and run `pytest` first.
 
 ## Data & privacy
 
-Never commit real receipts, API keys, or databases. Use synthetic or redacted samples. See [docs/data-privacy.md](docs/data-privacy.md).
+Never commit real receipts, API keys, or databases. Use synthetic or redacted samples.
 
 > The reasoning agent gives general budgeting suggestions, not licensed financial advice.
 
