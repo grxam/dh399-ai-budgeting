@@ -54,7 +54,7 @@ pytest
 | `src/budget_ai/cli.py` | `budget-ai` command line |
 | `tests/` | Unit tests (no network calls; agents are mocked) |
 | `data/samples/` | Sample receipts (**synthetic only**, see data policy) |
-| `docs/` | Architecture, setup, team workflow, data privacy |
+| `docs/` | Architecture notes |
 | `.github/` | CI (runs the tests) |
 
 ## Working as a team
