@@ -20,7 +20,7 @@ Requires Python 3.11+ and an Anthropic API key.
 
 ```powershell
 git clone https://github.com/grxam/dh399-ai-budgeting.git
-cd REPO
+cd dh399-ai-budgeting
 python -m venv .venv
 .venv\Scripts\Activate.ps1          # macOS/Linux: source .venv/bin/activate
 pip install -e ".[dev]"
