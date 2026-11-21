@@ -1,6 +1,6 @@
 # AI Finance & Budgeting Assistant (DH399)
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/grxam/dh399-ai-budgeting/actions/workflows/ci.yml/badge.svg)](https://github.com/grxam/dh399-ai-budgeting/actions/workflows/ci.yml)
 
 A budgeting app built from two cooperating AI agents and a database:
 
@@ -19,7 +19,7 @@ See [docs/architecture.md](docs/architecture.md) for details.
 Requires Python 3.11+ and an Anthropic API key.
 
 ```powershell
-git clone https://github.com/OWNER/REPO.git
+git clone https://github.com/grxam/dh399-ai-budgeting.git
 cd REPO
 python -m venv .venv
 .venv\Scripts\Activate.ps1          # macOS/Linux: source .venv/bin/activate
