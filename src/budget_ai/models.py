@@ -23,6 +23,20 @@ class LineItem(BaseModel):
         v = v.lower().strip()
         return v if v in CATEGORIES else "other"
 
+class Budget(BaseModel):
+    """Represents a monthly spending budget for a specific category."""
+    category: str
+    monthly_limit: float = Field(..., gt=0)
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        """Lowercase, strip, and reject unknown categories."""
+        v = v.lower().strip()
+        if v not in CATEGORIES:
+            raise ValueError(f"Unknown category: {v!r}. Choose from {', '.join(CATEGORIES)}")
+        return v
+
 class Receipt(BaseModel):
     """Represents the structured data of a financial receipt."""
     merchant: str
@@ -55,3 +69,17 @@ class Receipt(BaseModel):
                 warnings.append(f"Subtotal + Tax ({self.subtotal + self.tax:.2f}) differs from total ({self.total:.2f}) by more than 0.05")
         
         return warnings
+
+class Goal(BaseModel):
+    """Represents a savings goal."""
+    name: str = Field(..., min_length=1)
+    target_amount: float = Field(..., gt=0)
+    saved_amount: float = Field(default=0.0, ge=0.0)
+    target_date: date | None = None
+
+    def progress_pct(self) -> float:
+        """Return the percentage of the goal completed, capped at 100.0."""
+        if self.target_amount == 0:
+            return 0.0
+        progress = (self.saved_amount / self.target_amount) * 100
+        return round(min(progress, 100.0), 1)

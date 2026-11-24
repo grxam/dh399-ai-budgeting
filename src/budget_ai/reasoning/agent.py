@@ -3,8 +3,12 @@ import json
 from openai import OpenAI
 
 from budget_ai.db.database import Database
+from budget_ai.budgets import budget_report
 
-SYSTEM_PROMPT = "You are a friendly personal budgeting assistant. You are given the user's spending data as JSON inside <data> tags, followed by their question. Use only the numbers in the data; quote specific amounts, categories and merchants; never invent transactions. If there is too little data (for example fewer than 5 receipts), say so and tell the user what to add. Structure every answer as: Summary (1-2 sentences), What I noticed (2-4 bullets, each backed by a number), Suggestions (2-3 realistic actions). Keep it under 200 words, plain language. Give general budgeting tips only; do not recommend specific investments and do not claim to be a financial advisor. If the question is not about the user's spending, say you can only help with budgeting."
+SYSTEM_PROMPT = (
+    "You are a friendly personal budgeting assistant. You are given the user's spending data as JSON inside <data> tags, followed by their question. Use only the numbers in the data; quote specific amounts, categories and merchants; never invent transactions. If there is too little data (for example fewer than 5 receipts), say so and tell the user what to add. Structure every answer as: Summary (1-2 sentences), What I noticed (2-4 bullets, each backed by a number), Suggestions (2-3 realistic actions). Keep it under 200 words, plain language. Give general budgeting tips only; do not recommend specific investments and do not claim to be a financial advisor. If the question is not about the user's spending, say you can only help with budgeting. "
+    "If a budget_report is present, compare spending to each budget using the spent, remaining and state fields, mention any category whose state is over or warning, and report progress toward each goal using pct_complete and monthly_needed. Never invent budgets or goals that are not in the data. If there are no budgets, suggest the user set one."
+)
 
 class ReasoningAgent:
     """Agent that provides budgeting advice based on transaction history."""
@@ -19,7 +23,8 @@ class ReasoningAgent:
         """Builds a dictionary of the user's spending summary and recent receipts."""
         return {
             "spending_by_category": self.db.spending_by_category(),
-            "recent_receipts": self.db.recent_receipts(limit=50)
+            "recent_receipts": self.db.recent_receipts(limit=50),
+            "budget_report": budget_report(self.db)
         }
 
     def advise(self, question: str) -> str:

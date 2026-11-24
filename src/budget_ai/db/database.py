@@ -1,7 +1,7 @@
 import os
 import sqlite3
 
-from budget_ai.models import Receipt
+from budget_ai.models import Receipt, Budget, Goal
 
 
 class Database:
@@ -45,6 +45,21 @@ class Database:
                 FOREIGN KEY(receipt_id) REFERENCES receipts(id) ON DELETE CASCADE
             )
         """)
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS budgets (
+                category TEXT PRIMARY KEY,
+                monthly_limit REAL NOT NULL
+            )
+        """)
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                target_amount REAL NOT NULL,
+                saved_amount REAL NOT NULL DEFAULT 0,
+                target_date TEXT
+            )
+        """)
         self.conn.commit()
 
     def save_receipt(self, receipt: Receipt) -> int:
@@ -80,6 +95,105 @@ class Database:
         rows = cursor.fetchall()
         totals = {row['category']: round(row['total_sum'], 2) for row in rows}
         return dict(sorted(totals.items(), key=lambda x: x[1], reverse=True))
+
+    def set_budget(self, budget: Budget) -> None:
+        """Insert or replace a budget for a category."""
+        with self.conn:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO budgets (category, monthly_limit) VALUES (?, ?)",
+                (budget.category, budget.monthly_limit)
+            )
+
+    def delete_budget(self, category: str) -> None:
+        """Delete a budget for a category."""
+        with self.conn:
+            self.conn.execute("DELETE FROM budgets WHERE category = ?", (category,))
+
+    def list_budgets(self) -> list[dict]:
+        """List all budgets, sorted by category."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT category, monthly_limit FROM budgets ORDER BY category")
+        return [dict(row) for row in cursor.fetchall()]
+
+    def add_goal(self, goal: Goal) -> int:
+        """Add a new goal and return its ID."""
+        with self.conn:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT INTO goals (name, target_amount, saved_amount, target_date) VALUES (?, ?, ?, ?)",
+                (goal.name, goal.target_amount, goal.saved_amount, goal.target_date.isoformat() if goal.target_date else None)
+            )
+            return cursor.lastrowid
+
+    def list_goals(self) -> list[dict]:
+        """List all goals, sorted by ID."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT id, name, target_amount, saved_amount, target_date FROM goals ORDER BY id")
+        return [dict(row) for row in cursor.fetchall()]
+
+    def contribute_to_goal(self, goal_id: int, amount: float) -> None:
+        """Add amount to a goal's saved_amount. Raise ValueError if goal doesn't exist or amount <= 0."""
+        if amount <= 0:
+            raise ValueError("Amount must be greater than zero")
+        
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT id FROM goals WHERE id = ?", (goal_id,))
+        if not cursor.fetchone():
+            raise ValueError(f"Goal with ID {goal_id} does not exist")
+        
+        with self.conn:
+            self.conn.execute(
+                "UPDATE goals SET saved_amount = saved_amount + ? WHERE id = ?",
+                (amount, goal_id)
+            )
+
+    def delete_goal(self, goal_id: int) -> None:
+        """Delete a goal by ID."""
+        with self.conn:
+            self.conn.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
+
+    def spending_by_category_for_month(self, month: str) -> dict[str, float]:
+        """Sum total spending grouped by category for a specific month (YYYY-MM)."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT category, SUM(total) as total_sum FROM receipts "
+            "WHERE purchase_date IS NOT NULL AND substr(purchase_date, 1, 7) = ? "
+            "GROUP BY category",
+            (month,),
+        )
+        rows = cursor.fetchall()
+        totals = {row['category']: round(row['total_sum'], 2) for row in rows}
+        return dict(totals)
+
+    def list_receipts(self, limit: int = 100, offset: int = 0, category: str | None = None) -> list[dict]:
+        """List receipts with optional category filter and pagination."""
+        query = "SELECT * FROM receipts"
+        params = []
+        
+        if category:
+            query += " WHERE category = ?"
+            params.append(category)
+            
+        query += " ORDER BY purchase_date DESC, id DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        
+        cursor = self.conn.cursor()
+        cursor.execute(query, tuple(params))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_receipt_with_items(self, receipt_id: int) -> dict | None:
+        """Get a receipt dictionary including its line items."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM receipts WHERE id = ?", (receipt_id,))
+        receipt_row = cursor.fetchone()
+        if not receipt_row:
+            return None
+        
+        receipt = dict(receipt_row)
+        cursor.execute("SELECT * FROM line_items WHERE receipt_id = ?", (receipt_id,))
+        items = [dict(row) for row in cursor.fetchall()]
+        receipt["items"] = items
+        return receipt
 
     def close(self) -> None:
         """Close the database connection."""
