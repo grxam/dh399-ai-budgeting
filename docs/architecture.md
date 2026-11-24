@@ -13,7 +13,7 @@
 ## Components
 
 ### Vision agent (`src/budget_ai/vision/`)
-Sends the image to a vision-capable Claude model with a strict JSON-only prompt. Output is validated into a `Receipt`; invalid output raises instead of being stored silently.
+Sends the image to a vision-capable model with a strict JSON-only prompt. Output is validated into a `Receipt`; invalid output raises instead of being stored silently.
 
 ### Database (`src/budget_ai/db/`)
 SQLite with `receipts` and `line_items`. Swappable later (Postgres) behind the `Database` class.
