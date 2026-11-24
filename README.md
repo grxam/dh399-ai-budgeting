@@ -67,6 +67,15 @@ Never commit real receipts, API keys, or databases. Use synthetic or redacted sa
 
 > The reasoning agent gives general budgeting suggestions, not licensed financial advice.
 
+## API
+
+To start the API server, first install the API dependencies and then run the command:
+```powershell
+pip install -e ".[api]"
+budget-ai-api
+```
+Interactive documentation is available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+
 ## License
 
 [MIT](LICENSE)
