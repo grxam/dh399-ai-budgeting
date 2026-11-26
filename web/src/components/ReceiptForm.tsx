@@ -12,6 +12,16 @@ interface ItemDraft {
   original?: LineItem;
 }
 
+// Prices are kept as text; a leading "-" marks a discount.
+const isNegative = (price: string) => price.trim().startsWith("-");
+const flipSign = (price: string) => (isNegative(price) ? price.trim().slice(1) : `-${price.trim()}`);
+/** Apply what was typed while keeping the current sign; typing "-" (on a real keyboard) makes it negative. */
+const withSign = (typed: string, current: string) => {
+  const negative = typed.includes("-") || isNegative(current);
+  const digits = typed.replace(/-/g, "");
+  return negative ? `-${digits}` : digits;
+};
+
 const toDraft = (item: LineItem): ItemDraft => ({
   description: item.description,
   quantity: String(item.quantity),
@@ -123,13 +133,22 @@ export function ReceiptForm({
               aria-label={`Item ${i + 1} quantity`}
               onChange={(e) => setItem(i, { quantity: e.target.value })}
             />
-            <span className="money-input item-price">
-              <span>$</span>
+            <span className={`money-input item-price ${isNegative(item.price) ? "negative" : ""}`}>
+              {/* Phone number keypads have no minus key, so the sign is a toggle. */}
+              <button
+                type="button"
+                className="sign-toggle"
+                aria-label={isNegative(item.price) ? `Item ${i + 1} is a discount; make it a charge` : `Make item ${i + 1} a discount (negative)`}
+                aria-pressed={isNegative(item.price)}
+                onClick={() => setItem(i, { price: flipSign(item.price) })}
+              >
+                {isNegative(item.price) ? "−$" : "$"}
+              </button>
               <input
                 inputMode="decimal"
-                value={item.price}
+                value={item.price.replace(/^-/, "")}
                 aria-label={`Item ${i + 1} price`}
-                onChange={(e) => setItem(i, { price: e.target.value })}
+                onChange={(e) => setItem(i, { price: withSign(e.target.value, item.price) })}
               />
             </span>
             <button

@@ -362,9 +362,15 @@ a { color: inherit; text-decoration: none; }
 .kind-toggle.three { grid-template-columns: repeat(3, 1fr); }
 .item-editor { display: flex; flex-direction: column; gap: 8px; background: #fff; border-radius: 16px; padding: 14px; }
 .item-editor-head { display: flex; justify-content: space-between; align-items: baseline; }
-.item-row { display: grid; grid-template-columns: 1fr 44px 92px 30px; gap: 6px; align-items: center; }
+.item-row { display: grid; grid-template-columns: 1fr 40px 106px 30px; gap: 6px; align-items: center; }
 .item-row .text-input, .item-row .money-input { padding: 9px 10px; font-size: 15px; border-radius: 12px; }
 .item-qty { text-align: center; }
+.sign-toggle {
+  flex: none; min-width: 26px; padding: 2px 4px; margin-left: -4px; border-radius: 8px;
+  color: var(--muted); background: var(--tint-grey); font-size: 14px; font-weight: 600;
+}
+.item-price.negative .sign-toggle { background: var(--tint-green); color: var(--positive); }
+.item-price.negative input { color: var(--positive); }
 .item-row .icon-button.small { width: 30px; height: 30px; }
 .add-item { align-self: flex-start; font-size: 15px; margin-top: 2px; }
 .warn-text { color: #8a5a17 !important; }
