@@ -66,3 +66,23 @@ def test_database_folder_creation(tmp_path):
     db = Database(db_path)
     db.close()
     assert os.path.exists(db_path)
+
+
+def test_connection_usable_from_another_thread(tmp_path):
+    """FastAPI opens the DB in one worker thread and uses it in another."""
+    import threading
+
+    db = Database(str(tmp_path / "test.db"))
+    errors = []
+
+    def use_db():
+        try:
+            db.list_budgets()
+        except Exception as e:
+            errors.append(e)
+
+    worker = threading.Thread(target=use_db)
+    worker.start()
+    worker.join()
+    db.close()
+    assert errors == []

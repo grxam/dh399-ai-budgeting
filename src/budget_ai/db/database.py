@@ -13,7 +13,11 @@ class Database:
             if folder:
                 os.makedirs(folder, exist_ok=True)
         
-        self.conn = sqlite3.connect(db_path)
+        # FastAPI opens this in one worker thread (the get_db dependency) and
+        # runs the endpoint in another, so allow the connection to cross
+        # threads. Each request gets its own Database and uses it one step at
+        # a time; never share one instance between concurrent threads.
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.execute("PRAGMA foreign_keys = ON;")
         self.conn.row_factory = sqlite3.Row
         self._create_tables()
