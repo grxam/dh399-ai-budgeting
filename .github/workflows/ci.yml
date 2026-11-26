@@ -12,3 +12,18 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev,api]"
       - run: pytest || [ $? -eq 5 ]  # exit 5 = no tests collected yet
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci           # fails if package-lock.json is out of date
+      - run: npm run build    # type-check (tsc -b) and production build (vite build)
