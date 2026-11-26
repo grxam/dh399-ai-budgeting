@@ -130,16 +130,37 @@ def list_activity(
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0),
     month: Optional[str] = MonthParam,
+    q: Optional[str] = Query(None, max_length=100),
+    category: Optional[str] = None,
+    kind: Optional[Literal["expense", "income"]] = None,
+    min_amount: Optional[float] = Query(None, ge=0),
+    max_amount: Optional[float] = Query(None, ge=0),
     db: Database = Depends(get_db),
 ):
-    """Scanned receipts and manual transactions together, newest first."""
-    items = db.list_activity(limit=limit, offset=offset, month=month)
+    """Scanned receipts and manual transactions together, newest first.
+
+    q searches stores, descriptions and receipt line items; the other
+    parameters filter by category, kind and amount range.
+    """
+    if category is not None and category not in CATEGORIES and category != "income":
+        raise HTTPException(status_code=422, detail=f"Unknown category: {category!r}")
+    items = db.list_activity(
+        limit=limit, offset=offset, month=month, q=q, category=category,
+        kind=kind, min_amount=min_amount, max_amount=max_amount,
+    )
     return {"items": items, "limit": limit, "offset": offset}
 
 @app.post("/api/transactions", status_code=status.HTTP_201_CREATED)
 def add_transaction(txn: Transaction, db: Database = Depends(get_db)):
     """Add a manual expense or income."""
     return {"id": db.add_transaction(txn)}
+
+@app.put("/api/transactions/{txn_id}")
+def update_transaction(txn_id: int, txn: Transaction, db: Database = Depends(get_db)):
+    """Replace a manual expense or income."""
+    if not db.update_transaction(txn_id, txn):
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return {"id": txn_id}
 
 @app.delete("/api/transactions/{txn_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_transaction(txn_id: int, db: Database = Depends(get_db)):
@@ -194,6 +215,17 @@ def save_receipt(receipt_data: ReceiptCreate, db: Database = Depends(get_db)):
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error saving receipt: {str(e)}")
+
+@app.put("/api/receipts/{receipt_id}")
+def update_receipt(receipt_id: int, receipt_data: ReceiptCreate, db: Database = Depends(get_db)):
+    """Replace a receipt's details and line items."""
+    try:
+        receipt = Receipt(**receipt_data.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    if not db.update_receipt(receipt_id, receipt):
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    return {"id": receipt_id}
 
 @app.get("/api/budgets")
 def list_budgets(db: Database = Depends(get_db)):

@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Camera, CircleCheck, ImagePlus, ScanLine, TriangleAlert } from "lucide-react";
 import { api, type ExtractResult, type ReceiptData } from "../api";
-import { EXPENSE_CATEGORIES, categoryMeta } from "../categories";
-import { money, todayIso } from "../format";
+import { categoryMeta } from "../categories";
+import { money } from "../format";
 import { Header } from "../components/Header";
-import { CategoryPicker } from "../components/ui";
+import { ReceiptForm } from "../components/ReceiptForm";
+import { TransactionForm } from "../components/TransactionForm";
 
 type Mode = "scan" | "manual";
 
@@ -74,29 +75,19 @@ async function shrinkImage(file: File): Promise<File> {
   }
 }
 
-interface Draft {
-  merchant: string;
-  date: string;
-  total: string;
-  category: string;
-}
-
 function ScanFlow({ onSaved }: { onSaved: (message: string) => void }) {
   const cameraInput = useRef<HTMLInputElement>(null);
   const libraryInput = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const [result, setResult] = useState<ExtractResult | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string>();
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview]);
 
   const reset = () => {
     setPreview(null);
     setResult(null);
-    setDraft(null);
     setError(undefined);
   };
 
@@ -106,14 +97,7 @@ function ScanFlow({ onSaved }: { onSaved: (message: string) => void }) {
     setPreview(URL.createObjectURL(file));
     setReading(true);
     try {
-      const res = await api.extractReceipt(await shrinkImage(file));
-      setResult(res);
-      setDraft({
-        merchant: res.receipt.merchant,
-        date: res.receipt.purchase_date ?? "",
-        total: String(res.receipt.total),
-        category: res.receipt.category,
-      });
+      setResult(await api.extractReceipt(await shrinkImage(file)));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -121,29 +105,10 @@ function ScanFlow({ onSaved }: { onSaved: (message: string) => void }) {
     }
   };
 
-  const save = async () => {
-    if (!result || !draft) return;
-    const total = Number(draft.total);
-    if (!draft.merchant.trim()) return setError("Add the store name.");
-    if (!(total > 0)) return setError("Enter the total paid.");
-    setSaving(true);
-    setError(undefined);
-    try {
-      const receipt: ReceiptData = {
-        ...result.receipt,
-        merchant: draft.merchant.trim(),
-        purchase_date: draft.date || null,
-        total,
-        category: draft.category,
-      };
-      await api.saveReceipt(receipt);
-      reset();
-      onSaved(`${receipt.merchant} saved`);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
+  const save = async (receipt: ReceiptData) => {
+    await api.saveReceipt(receipt);
+    reset();
+    onSaved(`${receipt.merchant} saved`);
   };
 
   const inputs = (
@@ -183,7 +148,7 @@ function ScanFlow({ onSaved }: { onSaved: (message: string) => void }) {
               <strong>Reading your receipt…</strong>
               <p className="muted small">This can take a little while on a local model.</p>
             </>
-          ) : draft ? (
+          ) : result ? (
             <>
               <strong>Check the details</strong>
               <p className="muted small">Fix anything we got wrong, then save.</p>
@@ -210,61 +175,18 @@ function ScanFlow({ onSaved }: { onSaved: (message: string) => void }) {
         </div>
       )}
 
-      {draft && result && (
-        <div className="form">
-          <label className="field">
-            <span className="field-label">Store</span>
-            <input className="text-input" value={draft.merchant} onChange={(e) => setDraft({ ...draft, merchant: e.target.value })} />
-          </label>
-          <div className="field-pair">
-            <label className="field">
-              <span className="field-label">Date</span>
-              <input className="text-input" type="date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
-            </label>
-            <label className="field">
-              <span className="field-label">Total ({result.receipt.currency})</span>
-              <span className="money-input">
-                <span>$</span>
-                <input inputMode="decimal" value={draft.total} onChange={(e) => setDraft({ ...draft, total: e.target.value })} />
-              </span>
-            </label>
-          </div>
-          <span className="field-label">Category</span>
-          <CategoryPicker value={draft.category} onChange={(category) => setDraft({ ...draft, category })} options={EXPENSE_CATEGORIES} />
-
-          {result.receipt.items.length > 0 && (
-            <details className="items">
-              <summary>{result.receipt.items.length} items</summary>
-              <ul>
-                {result.receipt.items.map((item, i) => (
-                  <li key={i}>
-                    <span>
-                      {item.quantity !== 1 && `${item.quantity} × `}
-                      {item.description}
-                    </span>
-                    <span>{money(item.total_price, true)}</span>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
-        </div>
+      {result && (
+        <ReceiptForm
+          initial={result.receipt}
+          submitLabel={(category) => `Save to ${categoryMeta(category).label}`}
+          onSubmit={save}
+        />
       )}
 
       {error && <p className="error-text">{error}</p>}
-      {draft && (
-        <>
-          <button className="primary-button" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : `Save to ${categoryMeta(draft.category).label}`}
-          </button>
-          <button className="secondary-button" onClick={reset} disabled={saving}>
-            Discard
-          </button>
-        </>
-      )}
-      {!reading && !draft && (
+      {!reading && (
         <button className="secondary-button" onClick={reset}>
-          Start over
+          {result ? "Discard" : "Start over"}
         </button>
       )}
     </section>
@@ -274,73 +196,14 @@ function ScanFlow({ onSaved }: { onSaved: (message: string) => void }) {
 // --- manual entry -----------------------------------------------------------
 
 function ManualForm({ onSaved }: { onSaved: (message: string) => void }) {
-  const [kind, setKind] = useState<"expense" | "income">("expense");
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("groceries");
-  const [date, setDate] = useState(todayIso());
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const value = Number(amount);
-    if (!(value > 0)) return setError("Enter an amount above zero.");
-    setBusy(true);
-    setError(undefined);
-    try {
-      await api.addTransaction({
-        kind,
-        amount: value,
-        category: kind === "expense" ? category : undefined,
-        description: description.trim() || null,
-        txn_date: date,
-      });
-      onSaved(kind === "income" ? `${money(value, true)} income added` : `${money(value, true)} expense added`);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
-    <form className="form manual" onSubmit={submit}>
-      <div className="kind-toggle" role="radiogroup" aria-label="Type">
-        {(["expense", "income"] as const).map((k) => (
-          <button key={k} type="button" role="radio" aria-checked={kind === k} className={kind === k ? "on" : ""} onClick={() => setKind(k)}>
-            {k === "expense" ? "Expense" : "Income"}
-          </button>
-        ))}
-      </div>
-      <label className="amount-field">
-        <span>{kind === "income" ? "+" : "−"}$</span>
-        <input inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Amount" autoFocus />
-      </label>
-      <label className="field">
-        <span className="field-label">What was it?</span>
-        <input
-          className="text-input"
-          placeholder={kind === "income" ? "Payday" : "Coffee break"}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          maxLength={200}
-        />
-      </label>
-      {kind === "expense" && (
-        <>
-          <span className="field-label">Category</span>
-          <CategoryPicker value={category} onChange={setCategory} options={EXPENSE_CATEGORIES} />
-        </>
-      )}
-      <label className="field">
-        <span className="field-label">Date</span>
-        <input className="text-input" type="date" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)} />
-      </label>
-      {error && <p className="error-text">{error}</p>}
-      <button className="primary-button" disabled={busy}>
-        {busy ? "Saving…" : kind === "income" ? "Add income" : "Add expense"}
-      </button>
-    </form>
+    <TransactionForm
+      autoFocus
+      submitLabel={(kind) => (kind === "income" ? "Add income" : "Add expense")}
+      onSubmit={async (txn) => {
+        await api.addTransaction(txn);
+        onSaved(`${money(txn.amount, true)} ${txn.kind === "income" ? "income" : "expense"} added`);
+      }}
+    />
   );
 }

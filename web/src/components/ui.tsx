@@ -109,9 +109,25 @@ export function ActivityRow({ item, onClick }: { item: ActivityItem; onClick?: (
   );
 }
 
-export function CategoryPicker({ value, onChange, options }: { value: string; onChange: (c: string) => void; options: string[] }) {
+export function CategoryPicker({
+  value,
+  onChange,
+  options,
+  allLabel,
+}: {
+  value: string;
+  onChange: (c: string) => void;
+  options: string[];
+  /** Adds a first chip with this label that selects "" (no category). */
+  allLabel?: string;
+}) {
   return (
     <div className="chip-row" role="radiogroup" aria-label="Category">
+      {allLabel && (
+        <button type="button" role="radio" aria-checked={value === ""} className={`chip ${value === "" ? "chip-on" : ""}`} onClick={() => onChange("")}>
+          {allLabel}
+        </button>
+      )}
       {options.map((key) => {
         const { label, Icon } = categoryMeta(key);
         return (

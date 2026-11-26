@@ -88,6 +88,17 @@ export interface ExtractResult {
   needs_review: boolean;
 }
 
+export interface ActivityQuery {
+  month?: string;
+  limit?: number;
+  offset?: number;
+  q?: string;
+  category?: string;
+  kind?: "expense" | "income";
+  minAmount?: number;
+  maxAmount?: number;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -143,10 +154,16 @@ export const api = {
   report: (month?: string) => request<Report>(`/report?${monthQuery(month)}`),
   insights: (month?: string) => request<Insights>(`/insights?${monthQuery(month)}`),
   notifications: (month?: string) => request<Notification[]>(`/notifications?${monthQuery(month)}`),
-  activity: (opts: { month?: string; limit?: number; offset?: number } = {}) =>
-    request<{ items: ActivityItem[] }>(
-      `/activity?limit=${opts.limit ?? 20}&offset=${opts.offset ?? 0}&${monthQuery(opts.month)}`,
-    ),
+  activity: (opts: ActivityQuery = {}) => {
+    const params = new URLSearchParams({ limit: String(opts.limit ?? 20), offset: String(opts.offset ?? 0) });
+    if (opts.month) params.set("month", opts.month);
+    if (opts.q?.trim()) params.set("q", opts.q.trim());
+    if (opts.category) params.set("category", opts.category);
+    if (opts.kind) params.set("kind", opts.kind);
+    if (opts.minAmount !== undefined) params.set("min_amount", String(opts.minAmount));
+    if (opts.maxAmount !== undefined) params.set("max_amount", String(opts.maxAmount));
+    return request<{ items: ActivityItem[] }>(`/activity?${params}`);
+  },
 
   setBudget: (category: string, monthly_limit: number) =>
     request<void>(`/budgets/${category}`, json("PUT", { monthly_limit })),
@@ -163,9 +180,14 @@ export const api = {
     return request<ExtractResult>("/receipts/extract", { method: "POST", body: form });
   },
   saveReceipt: (receipt: ReceiptData) => request<{ id: number }>("/receipts", json("POST", receipt)),
+  getReceipt: (id: number) => request<ReceiptData & { id: number }>(`/receipts/${id}`),
+  updateReceipt: (id: number, receipt: ReceiptData) =>
+    request<{ id: number }>(`/receipts/${id}`, json("PUT", receipt)),
   deleteReceipt: (id: number) => request<void>(`/receipts/${id}`, { method: "DELETE" }),
 
   addTransaction: (txn: NewTransaction) => request<{ id: number }>("/transactions", json("POST", txn)),
+  updateTransaction: (id: number, txn: NewTransaction) =>
+    request<{ id: number }>(`/transactions/${id}`, json("PUT", txn)),
   deleteTransaction: (id: number) => request<void>(`/transactions/${id}`, { method: "DELETE" }),
 
   chat: (messages: ChatMessage[], month?: string) =>

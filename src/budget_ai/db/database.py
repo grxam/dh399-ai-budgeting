@@ -239,6 +239,27 @@ class Database:
             cursor = self.conn.execute("DELETE FROM receipts WHERE id = ?", (receipt_id,))
         return cursor.rowcount > 0
 
+    def update_receipt(self, receipt_id: int, receipt: Receipt) -> bool:
+        """Replace a receipt's details and line items. Return False if it doesn't exist."""
+        with self.conn:
+            cursor = self.conn.execute(
+                "UPDATE receipts SET merchant = ?, purchase_date = ?, currency = ?, subtotal = ?, "
+                "tax = ?, total = ?, category = ?, confidence = ? WHERE id = ?",
+                (receipt.merchant, receipt.purchase_date.isoformat() if receipt.purchase_date else None,
+                 receipt.currency, receipt.subtotal, receipt.tax, receipt.total, receipt.category,
+                 receipt.confidence, receipt_id),
+            )
+            if cursor.rowcount == 0:
+                return False
+            self.conn.execute("DELETE FROM line_items WHERE receipt_id = ?", (receipt_id,))
+            for item in receipt.items:
+                self.conn.execute(
+                    "INSERT INTO line_items (receipt_id, description, quantity, unit_price, total_price, category) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (receipt_id, item.description, item.quantity, item.unit_price, item.total_price, item.category),
+                )
+        return True
+
     def add_transaction(self, txn: Transaction) -> int:
         """Save a manual expense or income and return its ID."""
         with self.conn:
@@ -249,31 +270,78 @@ class Database:
             )
         return cursor.lastrowid
 
+    def update_transaction(self, txn_id: int, txn: Transaction) -> bool:
+        """Replace a manual transaction's details. Return False if it doesn't exist."""
+        with self.conn:
+            cursor = self.conn.execute(
+                "UPDATE transactions SET kind = ?, amount = ?, category = ?, description = ?, "
+                "txn_date = ? WHERE id = ?",
+                (txn.kind, txn.amount, txn.category, txn.description, txn.txn_date.isoformat(), txn_id),
+            )
+        return cursor.rowcount > 0
+
     def delete_transaction(self, txn_id: int) -> bool:
         """Delete a manual transaction. Return False if it didn't exist."""
         with self.conn:
             cursor = self.conn.execute("DELETE FROM transactions WHERE id = ?", (txn_id,))
         return cursor.rowcount > 0
 
-    def list_activity(self, limit: int = 20, offset: int = 0, month: str | None = None) -> list[dict]:
+    def list_activity(
+        self,
+        limit: int = 20,
+        offset: int = 0,
+        month: str | None = None,
+        q: str | None = None,
+        category: str | None = None,
+        kind: str | None = None,
+        min_amount: float | None = None,
+        max_amount: float | None = None,
+    ) -> list[dict]:
         """Receipts and manual transactions together, newest first.
 
         Each row has source ("receipt" or "manual"), id, kind ("expense" or
         "income"), title, category, amount (always positive) and date.
+
+        q searches the store or description and, for receipts, the line
+        items (case-insensitive). The other arguments filter exactly; all
+        given filters must match.
         """
         query = (
-            "SELECT * FROM ("
+            "SELECT source, id, kind, title, category, amount, date FROM ("
             "SELECT 'receipt' AS source, id, 'expense' AS kind, merchant AS title, category, "
-            "total AS amount, purchase_date AS date FROM receipts "
+            "total AS amount, purchase_date AS date, "
+            "(SELECT group_concat(description, ' ') FROM line_items WHERE receipt_id = receipts.id) "
+            "AS items_text FROM receipts "
             "UNION ALL "
             "SELECT 'manual' AS source, id, kind, description AS title, category, "
-            "amount, txn_date AS date FROM transactions"
+            "amount, txn_date AS date, NULL AS items_text FROM transactions"
             ")"
         )
+        where: list[str] = []
         params: list = []
         if month:
-            query += " WHERE substr(date, 1, 7) = ?"
+            where.append("substr(date, 1, 7) = ?")
             params.append(month)
+        if q and q.strip():
+            # Escape LIKE wildcards so "%" and "_" in the search are literal.
+            escaped = q.strip().replace("!", "!!").replace("%", "!%").replace("_", "!_")
+            pattern = f"%{escaped}%"
+            where.append("(title LIKE ? ESCAPE '!' OR items_text LIKE ? ESCAPE '!')")
+            params.extend([pattern, pattern])
+        if category:
+            where.append("category = ?")
+            params.append(category)
+        if kind:
+            where.append("kind = ?")
+            params.append(kind)
+        if min_amount is not None:
+            where.append("amount >= ?")
+            params.append(min_amount)
+        if max_amount is not None:
+            where.append("amount <= ?")
+            params.append(max_amount)
+        if where:
+            query += " WHERE " + " AND ".join(where)
         query += " ORDER BY date IS NULL, date DESC, id DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
         return [dict(row) for row in self.conn.execute(query, params).fetchall()]
