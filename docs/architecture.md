@@ -36,7 +36,7 @@ Builds a JSON context from the database (category totals + recent receipts) and 
 ## Ideas / roadmap
 
 - Budgets and savings goals table; reasoning agent compares spend vs. budget
-- Human review step when vision `confidence` is low
+- ~~Human review step when vision `confidence` is low~~
 - Duplicate-receipt detection
 - Web UI (Streamlit / FastAPI) and image upload
 - Evaluation set of synthetic receipts with expected JSON to measure vision accuracy
