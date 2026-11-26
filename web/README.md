@@ -5,12 +5,12 @@ Mobile-first React + Vite frontend for the budget API, built from the team's Fig
 
 ## Run it
 
-You need Node 20+ and the Python API.
+You need Node 20.19+ (or 22.12+) and the Python API.
 
-1. Start the API from the repo root, with the venv active:
+1. Start the API from the repo root (the folder you cloned the repo into), with the venv active:
 
    ```powershell
-   cd "G:\Projects\DH399 - AI Finance and budgetting"
+   cd path\to\dh399-ai-budgeting
    .venv\Scripts\Activate.ps1
    budget-ai-api
    ```
@@ -23,7 +23,7 @@ You need Node 20+ and the Python API.
 2. In another terminal, start the web app:
 
    ```powershell
-   cd "G:\Projects\DH399 - AI Finance and budgetting\web"
+   cd path\to\dh399-ai-budgeting\web
    npm install
    npm run dev
    ```
