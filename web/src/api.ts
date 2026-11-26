@@ -88,6 +88,11 @@ export interface ExtractResult {
   needs_review: boolean;
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface NewGoal {
   name: string;
   target_amount: number;
@@ -162,6 +167,9 @@ export const api = {
 
   addTransaction: (txn: NewTransaction) => request<{ id: number }>("/transactions", json("POST", txn)),
   deleteTransaction: (id: number) => request<void>(`/transactions/${id}`, { method: "DELETE" }),
+
+  chat: (messages: ChatMessage[], month?: string) =>
+    request<{ answer: string; disclaimer: string }>("/chat", json("POST", { messages, month })),
 
   advice: (question: string, brief = false) =>
     request<{ answer: string; disclaimer: string }>("/advice", json("POST", { question, brief })),

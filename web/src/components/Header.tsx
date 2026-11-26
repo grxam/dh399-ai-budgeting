@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Bell, ChevronDown } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Bell, ChevronDown, MessageCircle } from "lucide-react";
 import { api, type Notification } from "../api";
 import { categoryMeta } from "../categories";
 import { money, monthLabel, monthName } from "../format";
@@ -61,10 +62,15 @@ export function Header({ title, showMonth = true }: { title: string; showMonth?:
     <header className="header">
       <div className="brand-row">
         <span className="brand">stashflow</span>
-        <button className="icon-button" onClick={openNotes} aria-label={unread ? `Notifications, ${unread} new` : "Notifications"}>
-          <Bell size={22} strokeWidth={1.6} />
-          {unread > 0 && <span className="dot" />}
-        </button>
+        <div className="header-actions">
+          <Link to="/ask" className="icon-button" aria-label="Ask stashflow a question">
+            <MessageCircle size={22} strokeWidth={1.6} />
+          </Link>
+          <button className="icon-button" onClick={openNotes} aria-label={unread ? `Notifications, ${unread} new` : "Notifications"}>
+            <Bell size={22} strokeWidth={1.6} />
+            {unread > 0 && <span className="dot" />}
+          </button>
+        </div>
       </div>
       <div className="title-row">
         <h1>{title}</h1>

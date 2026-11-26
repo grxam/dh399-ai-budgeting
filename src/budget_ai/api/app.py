@@ -1,9 +1,9 @@
 import os
 import tempfile
-from typing import List, Optional, Dict, Any
+from typing import List, Literal, Optional, Dict, Any
 from fastapi import FastAPI, Depends, HTTPException, Query, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from budget_ai.db.database import Database
 from budget_ai.budgets import budget_report
@@ -53,6 +53,21 @@ class GoalCreate(BaseModel):
 
 class GoalContribute(BaseModel):
     amount: float
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1, max_length=2000)
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage] = Field(..., min_length=1, max_length=20)
+    month: Optional[str] = Field(None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+
+    @field_validator("messages")
+    @classmethod
+    def ends_with_question(cls, messages: List[ChatMessage]) -> List[ChatMessage]:
+        if messages[-1].role != "user":
+            raise ValueError("The last message must be the user's question")
+        return messages
 
 class AdviceRequest(BaseModel):
     question: str
@@ -245,3 +260,18 @@ def get_advice(advice_data: AdviceRequest, db: Database = Depends(get_db)):
         }
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Reasoning agent error: {str(e)}")
+
+@app.post("/api/chat")
+def chat(chat_data: ChatRequest, db: Database = Depends(get_db)):
+    """Answer the latest question in an Ask conversation, using the user's data."""
+    try:
+        client = get_client()
+        model = os.getenv("REASONING_MODEL", "gemma")
+        agent = ReasoningAgent(db, client, model)
+        answer = agent.chat([m.model_dump() for m in chat_data.messages], month=chat_data.month)
+    except Exception:
+        raise HTTPException(status_code=502, detail="The AI couldn't answer right now. Is the model running?")
+    return {
+        "answer": answer,
+        "disclaimer": "General budgeting help, not licensed financial advice.",
+    }

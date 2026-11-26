@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowUp, ArrowUpRight, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpRight, MessageCircle, RefreshCw, Sparkles } from "lucide-react";
 import { api, type Insights as InsightsData } from "../api";
 import { categoryMeta } from "../categories";
 import { money, monthName, parseDate, shortRange } from "../format";
@@ -187,6 +187,9 @@ function TipCard({ data }: { data: InsightsData }) {
       <div className="tip-actions">
         <Link to="/budgets" className="link">
           Keep it going <ArrowUpRight size={16} />
+        </Link>
+        <Link to="/ask" className="link">
+          <MessageCircle size={16} /> Ask a question
         </Link>
         {data.spent > 0 && (
           <button className="link-button muted" onClick={() => fetchTip(true)} disabled={loading}>
