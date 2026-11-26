@@ -74,3 +74,33 @@ def test_arithmetic_warnings_tax():
     warnings3 = receipt3.arithmetic_warnings()
     assert len(warnings3) == 1
     assert "differs from total" in warnings3[0]
+
+
+# --- date checks ----------------------------------------------------------
+
+from datetime import date  # noqa: E402
+
+TODAY = date(2026, 11, 26)
+
+
+@pytest.mark.parametrize("purchase_date, expected", [
+    (date(2026, 11, 16), []),                       # recent: fine
+    (TODAY, []),                                    # today: fine
+    (date(2025, 11, 27), []),                       # just under a year: fine
+    (date(2026, 11, 27), ["in the future"]),
+    (date(2016, 11, 26), ["more than a year ago"]),  # 26/11/16 read day-first
+    (None, ["No purchase date"]),
+])
+def test_date_warnings(purchase_date, expected):
+    warnings = Receipt(merchant="Zehrs", total=7.18, purchase_date=purchase_date).date_warnings(TODAY)
+    assert len(warnings) == len(expected)
+    for warning, text in zip(warnings, expected):
+        assert text in warning
+
+
+def test_review_warnings_combines_arithmetic_and_date():
+    receipt = Receipt(merchant="Zehrs", subtotal=7.98, tax=0.0, total=7.18,
+                      purchase_date=date(2016, 11, 26))
+    warnings = receipt.review_warnings(TODAY)
+    assert len(warnings) == 2
+    assert "Subtotal + Tax" in warnings[0] and "more than a year ago" in warnings[1]

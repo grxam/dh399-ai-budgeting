@@ -1,13 +1,14 @@
 import os
 import tempfile
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, Query, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from budget_ai.db.database import Database
 from budget_ai.budgets import budget_report
-from budget_ai.models import CATEGORIES, Budget, Goal, Receipt, LineItem
+from budget_ai.insights import notifications, spending_insights
+from budget_ai.models import CATEGORIES, Budget, Goal, Receipt, LineItem, Transaction
 from budget_ai.vision.agent import VisionAgent
 from budget_ai.reasoning.agent import ReasoningAgent
 from budget_ai.api.deps import get_db, get_client
@@ -15,6 +16,9 @@ from openai import OpenAI
 
 # Load config
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
+
+# Optional ?month=YYYY-MM query parameter, rejected with 422 if malformed.
+MonthParam = Query(None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
 
 app = FastAPI(title="Budget AI")
 app.add_middleware(
@@ -44,12 +48,15 @@ class GoalCreate(BaseModel):
     target_amount: float
     saved_amount: float = 0.0
     target_date: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
 
 class GoalContribute(BaseModel):
     amount: float
 
 class AdviceRequest(BaseModel):
     question: str
+    brief: bool = False  # True: a one- or two-sentence tip instead of the full report
 
 # Endpoints
 
@@ -62,14 +69,14 @@ def list_categories():
     return CATEGORIES
 
 @app.get("/api/report")
-def get_report(month: Optional[str] = None, db: Database = Depends(get_db)):
+def get_report(month: Optional[str] = MonthParam, db: Database = Depends(get_db)):
     try:
         return budget_report(db, month=month)
     except Exception as e:
         raise HTTPException(status_code=502, detail="Internal server error during report generation")
 
 @app.get("/api/spending")
-def get_spending(month: Optional[str] = None, db: Database = Depends(get_db)):
+def get_spending(month: Optional[str] = MonthParam, db: Database = Depends(get_db)):
     try:
         if month:
             return db.spending_by_category_for_month(month)
@@ -97,6 +104,44 @@ def get_receipt(receipt_id: int, db: Database = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Receipt not found")
     return receipt
 
+@app.delete("/api/receipts/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_receipt(receipt_id: int, db: Database = Depends(get_db)):
+    if not db.delete_receipt(receipt_id):
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    return None
+
+@app.get("/api/activity")
+def list_activity(
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    month: Optional[str] = MonthParam,
+    db: Database = Depends(get_db),
+):
+    """Scanned receipts and manual transactions together, newest first."""
+    items = db.list_activity(limit=limit, offset=offset, month=month)
+    return {"items": items, "limit": limit, "offset": offset}
+
+@app.post("/api/transactions", status_code=status.HTTP_201_CREATED)
+def add_transaction(txn: Transaction, db: Database = Depends(get_db)):
+    """Add a manual expense or income."""
+    return {"id": db.add_transaction(txn)}
+
+@app.delete("/api/transactions/{txn_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_transaction(txn_id: int, db: Database = Depends(get_db)):
+    if not db.delete_transaction(txn_id):
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return None
+
+@app.get("/api/insights")
+def get_insights(month: Optional[str] = MonthParam, db: Database = Depends(get_db)):
+    """Month-to-date spending vs last month, last 7 days, and spending by category."""
+    return spending_insights(db, month=month)
+
+@app.get("/api/notifications")
+def get_notifications(month: Optional[str] = MonthParam, db: Database = Depends(get_db)):
+    """Budget and goal alerts, most urgent first."""
+    return notifications(db, month=month)
+
 @app.post("/api/receipts/extract", status_code=status.HTTP_200_OK)
 async def extract_receipt(file: UploadFile = File(...)):
     if not file.content_type.startswith("image/"):
@@ -114,7 +159,7 @@ async def extract_receipt(file: UploadFile = File(...)):
         agent = VisionAgent(client, model)
         receipt = agent.extract(tmp_path)
         
-        warnings = receipt.arithmetic_warnings()
+        warnings = receipt.review_warnings()
         needs_review = receipt.confidence < 0.6 or len(warnings) > 0
         
         return {"receipt": receipt, "warnings": warnings, "needs_review": needs_review}
@@ -193,7 +238,7 @@ def get_advice(advice_data: AdviceRequest, db: Database = Depends(get_db)):
         client = get_client()
         model = os.getenv("REASONING_MODEL", "gemma")
         agent = ReasoningAgent(db, client, model)
-        answer = agent.advise(advice_data.question)
+        answer = agent.advise(advice_data.question, brief=advice_data.brief)
         return {
             "answer": answer,
             "disclaimer": "General budgeting suggestions, not licensed financial advice."

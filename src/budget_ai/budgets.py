@@ -114,6 +114,8 @@ def goal_status(db: Database, today: date | None = None) -> List[Dict[str, Any]]
         status_list.append({
             "id": goal_id,
             "name": name,
+            "description": goal.get("description"),
+            "icon": goal.get("icon"),
             "target_amount": target_amount,
             "saved_amount": saved_amount,
             "remaining": remaining,

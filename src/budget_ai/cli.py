@@ -78,7 +78,7 @@ def main(argv: list[str] | None = None):
             agent = VisionAgent(client, vision_model)
             receipt = agent.extract(args.image)
             
-            warnings = receipt.arithmetic_warnings()
+            warnings = receipt.review_warnings()
             for w in warnings:
                 print(f"WARNING: {w}")
             

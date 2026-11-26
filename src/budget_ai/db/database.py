@@ -1,7 +1,17 @@
 import os
 import sqlite3
 
-from budget_ai.models import Receipt, Budget, Goal
+from datetime import date
+
+from budget_ai.models import Budget, Goal, Receipt, Transaction
+
+# Every expense, whether scanned (receipts) or entered by hand (transactions),
+# as rows of (d, category, amount). Spending and budget figures read from this.
+EXPENSES_SQL = (
+    "SELECT purchase_date AS d, category, total AS amount FROM receipts "
+    "UNION ALL "
+    "SELECT txn_date AS d, category, amount FROM transactions WHERE kind = 'expense'"
+)
 
 
 class Database:
@@ -64,7 +74,25 @@ class Database:
                 target_date TEXT
             )
         """)
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL CHECK (kind IN ('expense', 'income')),
+                amount REAL NOT NULL,
+                category TEXT NOT NULL,
+                description TEXT,
+                txn_date TEXT NOT NULL
+            )
+        """)
+        # Columns added after the first release; older databases lack them.
+        self._add_column_if_missing("goals", "description", "TEXT")
+        self._add_column_if_missing("goals", "icon", "TEXT")
         self.conn.commit()
+
+    def _add_column_if_missing(self, table: str, column: str, col_type: str) -> None:
+        existing = {row["name"] for row in self.conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
 
     def save_receipt(self, receipt: Receipt) -> int:
         """Save a receipt and its items to the database in a transaction."""
@@ -95,7 +123,9 @@ class Database:
     def spending_by_category(self) -> dict[str, float]:
         """Sum total spending grouped by category from receipts, sorted and rounded."""
         cursor = self.conn.cursor()
-        cursor.execute("SELECT category, SUM(total) as total_sum FROM receipts GROUP BY category")
+        cursor.execute(
+            f"SELECT category, SUM(amount) as total_sum FROM ({EXPENSES_SQL}) GROUP BY category"
+        )
         rows = cursor.fetchall()
         totals = {row['category']: round(row['total_sum'], 2) for row in rows}
         return dict(sorted(totals.items(), key=lambda x: x[1], reverse=True))
@@ -124,15 +154,19 @@ class Database:
         with self.conn:
             cursor = self.conn.cursor()
             cursor.execute(
-                "INSERT INTO goals (name, target_amount, saved_amount, target_date) VALUES (?, ?, ?, ?)",
-                (goal.name, goal.target_amount, goal.saved_amount, goal.target_date.isoformat() if goal.target_date else None)
+                "INSERT INTO goals (name, target_amount, saved_amount, target_date, description, icon) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (goal.name, goal.target_amount, goal.saved_amount,
+                 goal.target_date.isoformat() if goal.target_date else None,
+                 goal.description, goal.icon)
             )
             return cursor.lastrowid
 
     def list_goals(self) -> list[dict]:
         """List all goals, sorted by ID."""
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id, name, target_amount, saved_amount, target_date FROM goals ORDER BY id")
+        cursor.execute("SELECT id, name, target_amount, saved_amount, target_date, description, icon "
+            "FROM goals ORDER BY id")
         return [dict(row) for row in cursor.fetchall()]
 
     def contribute_to_goal(self, goal_id: int, amount: float) -> None:
@@ -160,8 +194,8 @@ class Database:
         """Sum total spending grouped by category for a specific month (YYYY-MM)."""
         cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT category, SUM(total) as total_sum FROM receipts "
-            "WHERE purchase_date IS NOT NULL AND substr(purchase_date, 1, 7) = ? "
+            f"SELECT category, SUM(amount) as total_sum FROM ({EXPENSES_SQL}) "
+            "WHERE d IS NOT NULL AND substr(d, 1, 7) = ? "
             "GROUP BY category",
             (month,),
         )
@@ -198,6 +232,68 @@ class Database:
         items = [dict(row) for row in cursor.fetchall()]
         receipt["items"] = items
         return receipt
+
+    def delete_receipt(self, receipt_id: int) -> bool:
+        """Delete a receipt and its line items. Return False if it didn't exist."""
+        with self.conn:
+            cursor = self.conn.execute("DELETE FROM receipts WHERE id = ?", (receipt_id,))
+        return cursor.rowcount > 0
+
+    def add_transaction(self, txn: Transaction) -> int:
+        """Save a manual expense or income and return its ID."""
+        with self.conn:
+            cursor = self.conn.execute(
+                "INSERT INTO transactions (kind, amount, category, description, txn_date) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (txn.kind, txn.amount, txn.category, txn.description, txn.txn_date.isoformat()),
+            )
+        return cursor.lastrowid
+
+    def delete_transaction(self, txn_id: int) -> bool:
+        """Delete a manual transaction. Return False if it didn't exist."""
+        with self.conn:
+            cursor = self.conn.execute("DELETE FROM transactions WHERE id = ?", (txn_id,))
+        return cursor.rowcount > 0
+
+    def list_activity(self, limit: int = 20, offset: int = 0, month: str | None = None) -> list[dict]:
+        """Receipts and manual transactions together, newest first.
+
+        Each row has source ("receipt" or "manual"), id, kind ("expense" or
+        "income"), title, category, amount (always positive) and date.
+        """
+        query = (
+            "SELECT * FROM ("
+            "SELECT 'receipt' AS source, id, 'expense' AS kind, merchant AS title, category, "
+            "total AS amount, purchase_date AS date FROM receipts "
+            "UNION ALL "
+            "SELECT 'manual' AS source, id, kind, description AS title, category, "
+            "amount, txn_date AS date FROM transactions"
+            ")"
+        )
+        params: list = []
+        if month:
+            query += " WHERE substr(date, 1, 7) = ?"
+            params.append(month)
+        query += " ORDER BY date IS NULL, date DESC, id DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        return [dict(row) for row in self.conn.execute(query, params).fetchall()]
+
+    def spending_between(self, start: date, end: date) -> float:
+        """Total spent from start to end, both inclusive."""
+        row = self.conn.execute(
+            f"SELECT SUM(amount) AS total FROM ({EXPENSES_SQL}) WHERE d BETWEEN ? AND ?",
+            (start.isoformat(), end.isoformat()),
+        ).fetchone()
+        return round(row["total"] or 0.0, 2)
+
+    def daily_spending(self, start: date, end: date) -> dict[str, float]:
+        """Total spent per day (YYYY-MM-DD) from start to end; days with no spending are left out."""
+        rows = self.conn.execute(
+            f"SELECT d, SUM(amount) AS total FROM ({EXPENSES_SQL}) "
+            "WHERE d BETWEEN ? AND ? GROUP BY d",
+            (start.isoformat(), end.isoformat()),
+        ).fetchall()
+        return {row["d"]: round(row["total"], 2) for row in rows}
 
     def close(self) -> None:
         """Close the database connection."""

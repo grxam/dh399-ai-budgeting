@@ -65,3 +65,22 @@ def test_reasoning_agent_budget_report_in_context():
     assert "spent" in prompt_content
     assert "100.0" in prompt_content
 
+
+
+def test_reasoning_agent_brief_uses_short_prompt():
+    """brief=True swaps the report-format system prompt for the short-tip one."""
+    from budget_ai.db.database import Database
+    from budget_ai.reasoning.agent import BRIEF_PROMPT, SYSTEM_PROMPT
+
+    db = Database(":memory:")
+    mock_client = MagicMock(spec=OpenAI)
+    mock_client.chat.completions.create.return_value = MagicMock(
+        choices=[MagicMock(message=MagicMock(content="Try a no-spend day."))]
+    )
+    agent = ReasoningAgent(db, mock_client, "fake-model")
+
+    assert agent.advise("Tip?", brief=True) == "Try a no-spend day."
+    assert mock_client.chat.completions.create.call_args.kwargs["messages"][0]["content"] == BRIEF_PROMPT
+    agent.advise("Tip?")
+    assert mock_client.chat.completions.create.call_args.kwargs["messages"][0]["content"] == SYSTEM_PROMPT
+    db.close()
