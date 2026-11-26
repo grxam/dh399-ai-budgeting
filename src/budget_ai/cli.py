@@ -10,6 +10,7 @@ from budget_ai.reasoning.agent import ReasoningAgent
 from budget_ai.vision.agent import VisionAgent
 from budget_ai.models import Budget, Goal
 from budget_ai.budgets import budget_status, unbudgeted_spending, goal_status
+from budget_ai.demo import DEFAULT_DEMO_PATH, seed_demo
 
 
 def main(argv: list[str] | None = None):
@@ -70,7 +71,25 @@ def main(argv: list[str] | None = None):
     goal_delete = goal_subparsers.add_parser("delete", help="Delete a goal")
     goal_delete.add_argument("id", help="Goal ID")
 
+    # Seed demo command
+    seed_parser = subparsers.add_parser(
+        "seed-demo", help=f"Create a demo database for presentations (default {DEFAULT_DEMO_PATH})"
+    )
+    seed_parser.add_argument("--db", default=DEFAULT_DEMO_PATH, help="Where to create it")
+    seed_parser.add_argument("--force", action="store_true", help="Replace the file if it exists")
+
     args = parser.parse_args(argv)
+
+    if args.command == "seed-demo":
+        # Writes only to --db, never to DATABASE_PATH, so real data is safe.
+        try:
+            seed_demo(args.db, force=args.force)
+        except FileExistsError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        print(f"Demo data written to {args.db}")
+        print(f"Start the API on it with: budget-ai-api --db {args.db}")
+        return
 
     db = Database(db_path)
     try:
