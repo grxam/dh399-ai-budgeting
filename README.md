@@ -16,7 +16,7 @@ See [docs/architecture.md](docs/architecture.md) for details.
 
 ## Quick start
 
-Requires Python 3.11+ and a local model server such as [Ollama](https://ollama.com) or LM Studio running Gemma. No cloud API key is needed.
+Requires Python 3.11+ and a local model server such as [Ollama](https://ollama.com) or LM Studio running Qwen 3.5-9B. No cloud API key is needed.
 
 ```powershell
 git clone https://github.com/grxam/dh399-ai-budgeting.git
